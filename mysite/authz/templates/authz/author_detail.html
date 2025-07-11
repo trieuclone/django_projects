@@ -1,0 +1,20 @@
+<fieldset>
+    <legend><h1>{{ author.author_name }}</h1></legend>
+    {% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+    <p> {{author.author_age}} </p>
+    {% for book in author.book_set.all %}
+        <p> {{ book.book_name }} </p>
+    {% endfor %}
+
+</fieldset>
+<form action = "{% url 'authz:author_update' pk=author.id %}" method = "post" >
+{% csrf_token %}
+    <p> Update Author</p>
+    <table>
+    {{ form.as_table}}
+    </table>
+    <input type = "submit" value = "Submit" >
+    <input type="submit" onclick="window.location='{% url 'authz:author_list' %}' ; return false;" value="Cancel">
+</form>
+
+<a href ="{% url 'authz:book_create' %}"> Thêm sách</a>

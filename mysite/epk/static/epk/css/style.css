@@ -1,0 +1,139 @@
+.container {  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 0.2fr 2.9fr 0.1fr;
+  gap: 0px 0px;
+  grid-auto-flow: row;
+  grid-template-areas:
+    "header"
+    "workingArea"
+    "footer";
+}
+
+.header { grid-area: header; }
+
+.footer { grid-area: footer; }
+
+.workingArea {  display: grid;
+  grid-template-columns: 0.4fr 1.6fr;
+  grid-template-rows: 1fr;
+  gap: 0px 0px;
+  grid-auto-flow: row;
+  grid-template-areas:
+    "customerList clinicalArea";
+  grid-area: workingArea;
+}
+
+.customerList {  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 0.1fr 1.9fr;
+  gap: 0px 0px;
+  grid-auto-flow: row;
+  grid-template-areas:
+    "customerListTab"
+    "customerNameList";
+  grid-area: customerList;
+}
+
+.customerListTab {  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
+  gap: 0px 0px;
+  grid-auto-flow: row;
+  grid-template-areas:
+    "waitingList workingList";
+  grid-area: customerListTab;
+}
+
+.waitingList { 
+  grid-area: waitingList; 
+  cursor: pointer;}
+.waitingList:hover { 
+  border: 1px solid rgb(0, 17, 250);
+  background-color: #8280fd;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.workingList { grid-area: workingList; 
+  cursor: pointer;}
+.workingList:hover { 
+  border: 1px solid rgb(0, 17, 250);
+  background-color: #8280fd;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.customerNameList { grid-area: customerNameList; }
+
+.clinicalArea {  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 0.5fr 1.5fr;
+  gap: 0px 0px;
+  grid-auto-flow: row;
+  grid-template-areas:
+    "CustomerInfo"
+    "clinicalInfo";
+  grid-area: clinicalArea;
+}
+
+.CustomerInfo { grid-area: CustomerInfo; }
+
+.clinicalInfo {  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 0.2fr 1.8fr;
+  gap: 0px 0px;
+  grid-auto-flow: row;
+  grid-template-areas:
+    "clinicalTab"
+    "customerClinicalInfo";
+  grid-area: clinicalInfo;
+}
+
+.clinicalTab {  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr;
+  gap: 0px 0px;
+  grid-auto-flow: row;
+  grid-template-areas:
+    "customerHistory customerResult customerPrecription";
+  grid-area: clinicalTab;
+}
+
+.customerHistory { grid-area: customerHistory; }
+
+.customerResult { grid-area: customerResult; }
+
+.customerPrecription { grid-area: customerPrecription; }
+
+.customerClinicalInfo { grid-area: customerClinicalInfo; }
+
+#customerClinicalInput {
+  width: 100%; /* Take 100% of the parent's width */
+  height: 100%; /* This will make it fill the remaining height in the flex container */
+  box-sizing: border-box; /* Crucial: padding and border are included in the 100% dimensions */
+  padding: 8px; /* padding inside the textarea */
+  border: 1px solid #ccc;
+  resize: vertical; /* Allow user to resize vertically */
+  flex-grow: 1; /* Allow the textarea to grow and take up all available space in the flex container */
+  min-height: 50px; /* Optional: ensures it's not too small even if content is tiny */
+}
+
+html, body , .container {
+  height: 100%;
+  margin: 0;
+}
+
+/* For presentation only, no need to copy the code below */
+
+.container * {
+  border: 1px solid blanchedalmond;
+  position: relative;
+}
+
+.container *:after {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  align-items: center;
+  justify-content: center;
+}
+

@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title> Orgmode Resembling Editor</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    textarea {
+      flex: 1;
+      width: 100%;
+      border: 1px solid black;
+      box-sizing: border-box;
+      resize: none;
+      font-family: monospace;
+      color: #0036b3; /*#021d6e;*/
+      /*background-color: #252627;*/
+      padding-bottom: 500px; /* adds space below last line */
+      scroll-padding-bottom: 0px; /* for smooth keyboard scroll into view */
+      overflow-y: auto;
+      line-height: 1.4em;
+    }
+
+    #controls {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px;
+      background: #eee;
+      flex-wrap: wrap; /* ADDED for undo/redo buttons fit */
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      font-family: Arial;
+    }
+
+    button {
+      padding: 3px 6px;
+      font-size: 12px;
+      font-family: Arial;
+
+    }
+
+    #shortcuts {
+      font-size: 12px;
+      background: #f0f0f0;
+      padding: 4px;
+      text-align: center;
+    }
+    .button-link {
+    padding: 3px 6px;
+    background-color: #f0f0f0;
+    border: 1px solid blue;
+    border-style: outset;
+    border-width: 2px;
+    border-radius: 3px;
+    text-decoration: none;
+    color: #333;
+    cursor: pointer;
+    display: inline-block;
+    text-align: center;
+    line-height: normal;
+    font-family: inherit;
+    font-size: inherit;
+    }
+    .button-link:hover {
+    background-color: blue;
+    color: white;
+    }
+  </style>
+</head>
+<body>
+
+<div id="controls">
+  <button id="toggleDebug">Enable Debug</button>
+
+  <div>
+    <a id="focusMode" class="button-link">Focus mode</a>
+    <a id="newFile" href="{% url 'authz:orgmode' %}" class="button-link">New file</a>
+    <a id="openBtn" href="{% url 'authz:list_my_directory' %}" class="button-link">Open</a>
+    <button id="saveBtn">Save</button>
+    <button id="saveAsBtn">Save As</button>
+    <!-- ADDED Undo / Redo buttons -->
+    <button id="undoBtn" disabled>Undo</button>
+    <button id="redoBtn" disabled>Redo</button>
+  </div>
+  <div>
+    <!-- Font family -->
+  <label for="fontSelect">Font:</label>
+  <select id="fontSelect" onchange="changeFont()">
+    <option value="Arial">Arial</option>
+    <option value="sans-serif">Sans Serif</option>
+    <option value="serif">Serif</option>
+    <option value="monospace">Monospace</option>
+    <option value="Georgia">Georgia</option>
+    <option value="Verdana">Verdana</option>
+  </select>
+
+  <!-- Font size as number input -->
+  <label for="sizeInput">Size (px):</label>
+  <input type="number" id="sizeInput" value="16" min="8" max="72" onchange="changeSize()">
+
+  <!-- Font color -->
+  <label for="colorPicker">Color:</label>
+  <input type="color" id="colorPicker" onchange="changeColor()">
+  </div>
+</div>
+
+<div id="shortcuts">
+ File name: <strong id="currentFilename">{{ filename }}</strong>
+ {% if user.is_authenticated %}
+ <a href="{% url 'authz:logout' %}">Log out</a>
+ {% else %}
+ <a href="{% url 'login' %}?next={{request.path }}"> Login </a>
+ {% endif %}
+ <br>
+ Shortcuts: <strong>Ctrl+q</strong> to Collapse/Expand, <strong>Ctrl+Enter</strong> to insert sibling item
+
+</div>
+
+<textarea id="myTextarea" spellcheck="false" autofocus ="true" placeholder = "Wellcome to Orgmode Resembling Editor">{{ content }}</textarea>
+
+
+<script>
+let debugEnabled = false;
+let collapsedBlocks = {};
+let isSaved = true;
+
+const textarea = document.getElementById('myTextarea');
+
+const saveBtn = document.getElementById('saveBtn');
+const saveAsBtn = document.getElementById('saveAsBtn');
+const filenameDisplay = document.getElementById('currentFilename');
+
+const undoBtn = document.getElementById('undoBtn'); // ADDED
+const redoBtn = document.getElementById('redoBtn'); // ADDED
+
+// ========== Undo / Redo ==========
+// Each state is { value: textarea.value, collapsedBlocks: {...} }
+const undoStack = [];
+const redoStack = [];
+const MAX_STACK_SIZE = 10;
+function saveStateForUndo() {
+  // Save current state before a change
+  // Clone collapsedBlocks deeply to avoid mutation
+  undoStack.push({
+    value: textarea.value,
+    collapsedBlocks: JSON.parse(JSON.stringify(collapsedBlocks))
+  });
+  if (undoStack.length > MAX_STACK_SIZE) undoStack.shift();
+
+  // Clear redoStack on new action
+  redoStack.length = 0;
+  updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons() {
+  undoBtn.disabled = undoStack.length === 0;
+  redoBtn.disabled = redoStack.length === 0;
+}
+
+undoBtn.addEventListener('click', () => {
+  if (undoStack.length === 0) return;
+  // Save current state to redo stack before undo
+  redoStack.push({
+    value: textarea.value,
+    collapsedBlocks: JSON.parse(JSON.stringify(collapsedBlocks))
+  });
+  if (redoStack.length > MAX_STACK_SIZE) redoStack.shift();
+
+  const prevState = undoStack.pop();
+  textarea.value = prevState.value;
+  collapsedBlocks = JSON.parse(JSON.stringify(prevState.collapsedBlocks));
+  isSaved = false;
+  updateUndoRedoButtons();
+});
+
+redoBtn.addEventListener('click', () => {
+  if (redoStack.length === 0) return;
+  // Save current state to undo stack before redo
+  undoStack.push({
+    value: textarea.value,
+    collapsedBlocks: JSON.parse(JSON.stringify(collapsedBlocks))
+  });
+  if (undoStack.length > MAX_STACK_SIZE) undoStack.shift();
+
+  const nextState = redoStack.pop();
+  textarea.value = nextState.value;
+  collapsedBlocks = JSON.parse(JSON.stringify(nextState.collapsedBlocks));
+  isSaved = false;
+  updateUndoRedoButtons();
+});
+
+// Call this on any user input/change that should be undoable
+/*
+textarea.addEventListener('input', () => {
+  isSaved = false;
+  // Save state on each input, but debounce to avoid flooding undo stack
+  // We'll do a simple approach: save state only if different from last saved
+  // For simplicity, save state here, but better to throttle in a real app
+  if (undoStack.length === 0 || undoStack[undoStack.length-1].value !== textarea.value) {
+    saveStateForUndo();
+  }
+});
+*/
+// Initially save the first state (loaded content)
+saveStateForUndo();
+
+
+// ========== Utilities ==========
+
+function whereTheCursorOn() {
+  const cursorPos = textarea.selectionStart;
+  const lines = textarea.value.split('\n');
+  let total = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const lineLength = lines[i].length + 1;
+    if (cursorPos <= total + lines[i].length) {
+      return {
+        lineIndex: i,
+        lineText: lines[i],
+        column: cursorPos - total,
+        offset: cursorPos
+      };
+    }
+    total += lineLength;
+  }
+  return null;
+}
+
+function whatLevelOn(line) {
+  const headerMatch = line.match(/^(\*+)\s+\S?.*/);
+  if (headerMatch) return { type: "header", level: headerMatch[1].length };
+
+  const unorderedMatch = line.match(/^(\s*)([-+])\s+\S?.*/);
+  if (unorderedMatch) {
+    return { type: "list", level: unorderedMatch[1].length, marker: unorderedMatch[2] };
+  }
+
+  const orderedMatch = line.match(/^(\s*)(\d+)\.\s+\S?.*/);
+  if (orderedMatch) {
+    return { type: "list", level: orderedMatch[1].length, marker: orderedMatch[2] + '.' };
+  }
+
+  return { type: "none", level: 0 };
+}
+
+function getLineStructureFromCursor() {
+  const pos = whereTheCursorOn();
+  if (!pos) return { type: "none", level: 0 };
+  return whatLevelOn(pos.lineText);
+}
+
+// ========== Child Detection ==========
+
+function theChildOf(lineIndex) {
+  const lines = textarea.value.split('\n');
+  if (lineIndex >= lines.length - 1) return null;
+
+  const baseStruct = whatLevelOn(lines[lineIndex]);
+  if (baseStruct.type === "none") return null;
+
+  let content = [];
+  let start = null, end = null;
+
+  for (let i = lineIndex + 1; i < lines.length; i++) {
+    const currentStruct = whatLevelOn(lines[i]);
+
+    if (baseStruct.type === "header") {
+      if (currentStruct.type === "header" && currentStruct.level <= baseStruct.level) break;
+      if (
+        (currentStruct.type === "header" && currentStruct.level > baseStruct.level) ||
+        currentStruct.type === "list" || lines[i] === ""
+      ) {
+        if (start === null) start = i;
+        content.push(lines[i]);
+        end = i;
+        continue;
+      }
+      break;
+    }
+
+    // list case
+    if (
+      currentStruct.type !== baseStruct.type ||
+      currentStruct.level <= baseStruct.level
+    ) break;
+
+    if (start === null) start = i;
+    content.push(lines[i]);
+    end = i;
+  }
+
+  if (!content.length) return null;
+
+  return {
+    content: content.join('\n'),
+    start,
+    end
+  };
+}
+
+// ========== Collapse / Expand ==========
+
+function generateZeroWidthId(length = 30) {
+  const zeroWidthChars = [
+    '\u200B', // Zero Width Space
+    '\u200C', // Zero Width Non-Joiner
+    '\u200D', // Zero Width Joiner
+    '\u2060', // Word Joiner
+    '\uFEFF', // Zero Width No-Break Space
+    '\u180E'  // Mongolian Vowel Separator
+  ];
+
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    const randIndex = Math.floor(Math.random() * zeroWidthChars.length);
+    result += zeroWidthChars[randIndex];
+  }
+  return result;
+}
+
+function collapseAndStore() {
+  saveStateForUndo()
+  const pos = whereTheCursorOn();
+  if (!pos) return;
+  const child = theChildOf(pos.lineIndex);
+  if (!child) return;
+
+  const lines = textarea.value.split('\n');
+
+  // Generate unique random id string (make sure no collision)
+  let id;
+  do {
+    id = generateZeroWidthId();
+  } while (collapsedBlocks.hasOwnProperty(id));
+
+  const trackToken = `..${id}..`;  // MODIFIED format with ..<>..
+
+  collapsedBlocks[id] = {
+    content: child.content,
+    start: child.start,
+    end: child.end
+  };
+
+  lines.splice(child.start, child.end - child.start + 1);
+  lines[pos.lineIndex] += trackToken;
+
+  const newText = lines.join('\n');
+  const cursor = textarea.selectionStart;
+  textarea.value = newText;
+  textarea.selectionStart = textarea.selectionEnd = cursor;
+
+  isSaved = false;
+
+}
+
+function expandAndUpdate() {
+
+  saveStateForUndo()
+  const pos = whereTheCursorOn();
+  if (!pos) return;
+
+  const lines = textarea.value.split('\n');
+
+  // Modified regex to match new pattern ..id..
+  const regex = /.*?\s*\.\.([\u200B\u200C\u200D\u2060\uFEFF\u180E]{30})\.\.\s*$/;
+  const tokenRegex = /\.\.([\u200B\u200C\u200D\u2060\uFEFF\u180E]{30})\.\./;
+  const match = lines[pos.lineIndex].match(regex);
+
+  if (!match) return;
+
+  const id = match[1];
+  const block = collapsedBlocks[id];
+  if (!block) return;
+
+  lines[pos.lineIndex] = lines[pos.lineIndex].replace(tokenRegex, '').trimEnd();
+  lines.splice(pos.lineIndex + 1, 0, ...block.content.split('\n'));
+
+  const newText = lines.join('\n');
+  const cursor = textarea.selectionStart;
+  textarea.value = newText;
+  textarea.selectionStart = textarea.selectionEnd = cursor;
+
+  delete collapsedBlocks[id];
+  isSaved = false;
+
+}
+
+function expandAll() {
+  const regex = /.*?\s*\.\.([\u200B\u200C\u200D\u2060\uFEFF\u180E]{30})\.\.\s*$/;
+  const tokenRegex = /\.\.([\u200B\u200C\u200D\u2060\uFEFF\u180E]{30})\.\./;
+  let lines = textarea.value.split('\n');
+  let hasMore = true;
+
+  while (hasMore) {
+    hasMore = false;
+    let result = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const match = line.match(regex);
+
+      if (match) {
+        const id = match[1];
+        const block = collapsedBlocks[id];
+
+        if (block) {
+          result.push(line.replace(tokenRegex, ''));
+          result.push(...block.content.split('\n'));
+          delete collapsedBlocks[id];
+          hasMore = true; // There might be nested blocks
+        } else {
+          result.push(line);
+        }
+      } else {
+        result.push(line);
+      }
+    }
+
+    lines = result; // update for next loop if needed
+  }
+
+  textarea.value = lines.join('\n');
+  isSaved = false;
+
+  // Save state for undo after expand all
+  saveStateForUndo();
+}
+
+// implement toggleSameLevel()
+
+function toggleSameLevel(referenceStructure) {
+  const regex = /.*?\s*\.\.([\u200B\u200C\u200D\u2060\uFEFF\u180E]{30})\.\.\s*$/;
+  const tokenRegex = /\.\.([\u200B\u200C\u200D\u2060\uFEFF\u180E]{30})\.\./;
+
+  // Step 1: Check if all lines of the same type+level are collapsed
+const lines = textarea.value.split('\n');
+let allCollapsed = true;
+
+for (let i = 0; i < lines.length; i++) {
+  const structure = whatLevelOn(lines[i]);
+  if (structure.type === referenceStructure.type && structure.level === referenceStructure.level) {
+    const hasCollapsed = regex.test(lines[i]);
+    const child = theChildOf(i); // See if it even has children
+
+    // If it has children and it's not collapsed — it's expanded → break
+    if (child && !hasCollapsed) {
+      allCollapsed = false;
+      break;
+    }
+  }
+}
+
+  // Step 2: Expand all first to get a clean state
+  expandAll();
+  const expandedLines = textarea.value.split('\n');
+
+  // Step 3: If all were collapsed, we're done after expandAll()
+  if (allCollapsed) {
+    textarea.selectionStart = textarea.selectionEnd = 0; // reset cursor to top
+    textarea.focus();
+    return;
+  }
+
+  // Step 4: Scan line by line and collapse matching headers/lists
+  const resultLines = [];
+//  const newCollapsedBlocks = {}; // Store collapsedBlocks for this pass
+  let i = 0;
+
+  while (i < expandedLines.length) {
+    const line = expandedLines[i];
+    const structure = whatLevelOn(line);
+
+    if (structure.type === referenceStructure.type && structure.level === referenceStructure.level) {
+      const child = theChildOf(i);
+      if (child) {
+        // Store content in collapsedBlocks with a unique ID
+        let id;
+        do {
+          id = generateZeroWidthId();
+        } while (collapsedBlocks.hasOwnProperty(id));
+
+        collapsedBlocks[id] = {
+          content: child.content,
+          start: child.start,
+          end: child.end
+        };
+
+        const marker = `..${id}..`;
+        resultLines.push(line + marker);
+
+        i = child.end + 1; // Jump to the next parent (skip children)
+        continue;
+      }
+    }
+
+    // Default behavior: copy line as-is
+    resultLines.push(line);
+    i++;
+  }
+
+  // Step 5: Update textarea content and state
+  textarea.value = resultLines.join('\n');
+  //collapsedBlocks = newCollapsedBlocks; // Replace with new collapsedBlocks
+  isSaved = false;
+
+  // Step 6: Reset cursor to the top
+  textarea.selectionStart = textarea.selectionEnd = 0;
+  textarea.focus();
+}
+let collapseCycle = { maxLevel: 0, state: 0 };
+function cycleCollapseByHeaderLevel() {
+  expandAll(); // Step 1: Start with a clean slate
+
+  const lines = textarea.value.split('\n');
+
+  // Step 2: Calculate max header level
+  let maxLevel = 0;
+  for (const line of lines) {
+    const structure = whatLevelOn(line);
+    if (structure.type === "header" && structure.level > maxLevel) {
+      maxLevel = structure.level;
+    }
+  }
+
+  // If no headers, do nothing
+  if (maxLevel === 0) {
+    return;
+  }
+
+  // Store max level on first cycle
+  if (collapseCycle.state === 0) {
+    collapseCycle.maxLevel = maxLevel;
+  }
+
+  if (collapseCycle.state < collapseCycle.maxLevel) {
+    const refStructure = { type: "header", level: collapseCycle.state + 1 };
+    toggleSameLevel(refStructure);
+    collapseCycle.state += 1;
+  } else {
+    expandAll();
+    collapseCycle.state = 0;
+  }
+}
+
+function increaseLevelAtCursor() {
+
+
+  const pos = whereTheCursorOn();
+  if (!pos) return;
+  saveStateForUndo();
+  collapseCycle = { maxLevel: 0, state: 0 };
+  const lines = textarea.value.split('\n');
+  const lineIndex = pos.lineIndex;
+  const structure = whatLevelOn(lines[lineIndex]);
+
+  let line = lines[lineIndex];
+  let newLine = line;
+  let columnShift = 0;
+
+  if (structure.type === 'none') {
+    newLine = '* ' + line.trim();
+    columnShift = 2;
+  } else if (structure.type === 'header') {
+    const newLevel = structure.level + 1;
+    const stars = '*'.repeat(newLevel);
+    newLine = stars + line.slice(structure.level);
+    columnShift = newLevel - structure.level;
+  } else if (structure.type === 'list') {
+    newLine = '  ' + line;
+    columnShift = 2;
+  }
+
+  lines[lineIndex] = newLine;
+  textarea.value = lines.join('\n');
+
+  const newCursorOffset = pos.offset + columnShift;
+  textarea.selectionStart = textarea.selectionEnd = newCursorOffset;
+  textarea.focus();
+  isSaved = false;
+}
+
+function decreaseLevelAtCursor() {
+  const pos = whereTheCursorOn();
+  if (!pos) return;
+
+  const lines = textarea.value.split('\n');
+  const lineIndex = pos.lineIndex;
+  const structure = whatLevelOn(lines[lineIndex]);
+
+  let line = lines[lineIndex];
+  let newLine = line;
+  let columnShift = 0;
+
+  if (structure.type === 'none') return;
+
+  saveStateForUndo();
+  collapseCycle = { maxLevel: 0, state: 0 };
+
+  if (structure.type === 'header') {
+    if (structure.level === 1) {
+      newLine = line.slice(2).trimStart();
+      columnShift = -Math.min(pos.column, 2); // Removing up to "* "
+    } else {
+      const newLevel = structure.level - 1;
+      const stars = '*'.repeat(newLevel);
+      newLine = stars + line.slice(structure.level);
+      columnShift = newLevel - structure.level;
+    }
+  } else if (structure.type === 'list') {
+    if (structure.level <= 1) {
+      const match = line.trimStart().match(/^([-+*]|\d+\.)\s+/);
+      const removedLength = match ? match[0].length : 0;
+      newLine = line.trimStart().slice(removedLength).trimStart();
+      columnShift = -Math.min(pos.column, removedLength);
+    } else {
+      newLine = line.slice(2);
+      columnShift = -2;
+    }
+  }
+
+  lines[lineIndex] = newLine;
+  textarea.value = lines.join('\n');
+
+  // Recalculate cursor position and clamp to same line if necessary
+  const updatedLines = textarea.value.split('\n');
+  let baseOffset = 0;
+  for (let i = 0; i < lineIndex; i++) {
+    baseOffset += updatedLines[i].length + 1; // +1 for '\n'
+  }
+
+  let newCursorOffset = pos.offset + columnShift;
+  if (newCursorOffset < baseOffset) {
+    newCursorOffset = baseOffset; // Clamp to start of current line
+  }
+
+  textarea.selectionStart = textarea.selectionEnd = newCursorOffset;
+  textarea.focus();
+  isSaved = false;
+}
+
+function cycleListMarker(direction) {
+
+  const pos = whereTheCursorOn();
+  if (!pos) return;
+
+  const lines = textarea.value.split('\n');
+  const index = pos.lineIndex;
+  const line = lines[index];
+
+  const match = line.match(/^(\s*)([-+]|(\d+)\.)(\s+)(.*)$/);
+  if (!match) return;
+  saveStateForUndo();
+  const indent = match[1];
+  const marker = match[2];
+  const spacing = match[4];
+  const content = match[5];
+
+  const markers = ['-', '+', '1.'];
+  let currentIndex = markers.findIndex(m => m.startsWith(marker));
+
+  if (currentIndex === -1) return;
+
+  let newIndex = (currentIndex + direction + markers.length) % markers.length;
+  lines[index] = indent + markers[newIndex] + spacing + content;
+  // Recalculate cursor offset
+  const delta = markers[newIndex].length - match[2].length;
+  const newCursor = pos.offset + delta;
+  textarea.value = lines.join('\n');
+  textarea.selectionStart = textarea.selectionEnd = newCursor;
+  textarea.focus();
+  isSaved = false;
+
+}
+
+
+
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let cookie of cookies) {
+        cookie = cookie.trim();
+        if (cookie.startsWith(name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  async function saveToServer(filename, content) {
+    const formData = new FormData();
+    formData.append('filename', filename);
+    formData.append('content', content);
+
+    const csrftoken = getCookie('csrftoken');
+
+    try {
+      const response = await fetch("{% url 'authz:save_file' %}", {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-CSRFToken': csrftoken
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        filenameDisplay.textContent = filename;  // Update display after saving
+        alert('✅ ' + data.message);
+        isSaved = true;
+      } else {
+        alert('❌ Error: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('❌ Failed to save: ' + err.message);
+    }
+  }
+
+// Focus mode
+
+let focusState = {
+  mode: "off",
+  contentBefore: "",
+  contentFocus: "",
+  contentAfter: "",
+};
+
+function focusModeOn() {
+  const pos = whereTheCursorOn();
+  if (!pos) return;
+
+  const lines = textarea.value.split('\n');
+  const lineIndex = pos.lineIndex;
+  const structure = whatLevelOn(lines[lineIndex]);
+
+  if (structure.type !== 'header') return;
+
+  const child = theChildOf(lineIndex);
+  const focusLines = [];
+
+  focusLines.push(lines[lineIndex]); // current header
+  const start = lineIndex;
+  let end = lineIndex;
+
+  if (child) {
+    focusLines.push(...lines.slice(child.start, child.end + 1));
+    end = child.end;
+  }
+
+  focusState = {
+    mode: "on",
+    contentBefore: lines.slice(0, start).join('\n'),
+    contentFocus: focusLines.join('\n'),
+    contentAfter: lines.slice(end + 1).join('\n'),
+  };
+
+  textarea.value = focusState.contentFocus;
+  textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+  textarea.focus();
+
+  document.getElementById("focusMode").style.backgroundColor = "blue";
+  document.getElementById("focusMode").style.color = "white";
+
+// Calculate the scroll position 300px above the bottom of content
+  const scrollPosition = textarea.scrollHeight - textarea.clientHeight - 300;
+
+// Scroll to that position inside the textarea
+  textarea.scrollTop = scrollPosition > 0 ? scrollPosition : 0;
+}
+
+function focusModeOff() {
+  if (focusState.mode !== "on") return;
+
+  const currentCursorOffset = whereTheCursorOn()?.offset || 0;
+  const currentLineIndex = whereTheCursorOn()?.lineIndex || 0;
+  focusState.contentFocus = textarea.value
+  textarea.value = [
+    focusState.contentBefore,
+    focusState.contentFocus,
+    focusState.contentAfter
+  ].filter(Boolean).join('\n');
+
+  focusState.mode = "off";
+
+  const newCursorPos = (focusState.contentBefore ? focusState.contentBefore.length + 1 : 0) + currentCursorOffset;
+  textarea.selectionStart = textarea.selectionEnd = newCursorPos;
+  textarea.focus();
+
+  document.getElementById("focusMode").style.backgroundColor = "#f0f0f0";
+  document.getElementById("focusMode").style.color = "black";
+  const scrollToLine = currentLineIndex + focusState.contentBefore.split('\n').length - 6; // scroll to 6 lines before cursor
+  const lineNumber = scrollToLine > 0 ? scrollToLine : 0;
+  smoothScrollToLine(textarea, lineNumber)
+}
+
+function toggleFocusMode() {
+  if (focusState.mode === "on") {
+    focusModeOff();
+  } else {
+    focusModeOn();
+  }
+}
+
+function swapLine(direction) {
+  const pos = whereTheCursorOn();
+  if (!pos) return;
+
+  const lines = textarea.value.split('\n');
+  const fromIndex = pos.lineIndex; // Original index of the line where cursor is
+  const toIndex = fromIndex + direction; // Target index for the line where cursor is
+
+  // Prevent out-of-bounds swaps
+  if (toIndex < 0 || toIndex >= lines.length) return;
+
+  saveStateForUndo(); // Save state before modification
+
+  // 1. Identify the line content the cursor is currently on
+  const lineContentWithCursor = lines[fromIndex];
+  const originalColumn = pos.column;
+
+  // 2. Perform the swap on the array of lines
+  const temp = lines[fromIndex];
+  lines[fromIndex] = lines[toIndex];
+  lines[toIndex] = temp;
+
+  // 3. Update the textarea with the new content
+  textarea.value = lines.join('\n');
+
+  // 4. Calculate the new absolute cursor offset
+
+  // Find the start of the line that *now contains* the original line content.
+  // This line is now at 'toIndex'.
+  let startOfNewLineWithCursor = 0;
+  for (let i = 0; i < toIndex; i++) {
+    startOfNewLineWithCursor += lines[i].length + 1; // +1 for the newline character
+  }
+
+  // The new cursor offset is the start of that line plus the original column.
+  // We clamp it to the length of the *new* line (which is the original line's content)
+  // to prevent it from going beyond the line's end if the original column was past
+  // the end of the line (e.g., if click past the last character).
+  const clampedColumn = Math.min(originalColumn, lineContentWithCursor.length);
+  const newCursorOffset = startOfNewLineWithCursor + clampedColumn;
+
+  // 5. Set the cursor position
+  textarea.selectionStart = textarea.selectionEnd = newCursorOffset;
+  textarea.focus();
+
+  isSaved = false;
+}
+
+function smoothScrollToLine(textarea, lineNumber) {
+  const lineHeight = parseInt(getComputedStyle(textarea).lineHeight, 10);
+  const targetScrollTop = lineNumber * lineHeight;
+
+  textarea.scrollTo({
+    top: targetScrollTop,
+    behavior: 'smooth'
+  });
+}
+
+// ========== Shortcuts ==========
+
+textarea.addEventListener('keydown', (e) => {
+  const pos = whereTheCursorOn();
+  if (!pos) return;
+
+  const structure = whatLevelOn(pos.lineText);
+
+  // Ctrl + q
+  if (e.key.toLowerCase() === 'q' && e.ctrlKey) {
+    e.preventDefault();
+    const hasCollapsed = /.*?\s*\.\.([\u200B\u200C\u200D\u2060\uFEFF\u180E]{30})\.\.\s*$/.test(pos.lineText);
+    if (structure.type === "none") return;
+    if (hasCollapsed) {
+      expandAndUpdate();
+    } else {
+      collapseAndStore();
+    }
+  }
+
+  // ctrl + Enter
+  if (e.key === 'Enter' && e.ctrlKey) {
+    e.preventDefault();
+    const level = structure.level;
+    let prefix = '';
+
+    if (structure.type === "header") {
+      prefix = '*'.repeat(level) + ' ';
+    } else if (structure.type === "list") {
+      const indent = ' '.repeat(level);
+      if (structure.marker && /^\d+\.$/.test(structure.marker)) {
+        const nextNum = parseInt(structure.marker) + 1;
+        prefix = indent + nextNum + '. ';
+      } else if (structure.marker) {
+        prefix = indent + structure.marker + ' ';
+      }
+    }
+
+    const cursor = textarea.selectionStart;
+    textarea.setRangeText('\n' + prefix, cursor, cursor, 'end');
+  }
+
+  // Alt + z => Collapse/Expand all of same type & level
+  if (e.key.toLowerCase() === 'z' && e.altKey) {
+    e.preventDefault();
+
+    saveStateForUndo(); // Step 0: Save current state for undo
+
+    const pos = whereTheCursorOn();
+    if (!pos) return;
+
+    const referenceStructure = whatLevelOn(pos.lineText);
+    if (referenceStructure.type === "none") return;
+        else {
+        toggleSameLevel(referenceStructure);
+        }
+    }
+    // Alt + a => Cycle through collapsing headers by level
+    if (e.key.toLowerCase() === 'a' && e.altKey) {
+        e.preventDefault();
+        cycleCollapseByHeaderLevel();
+}
+// Alt + ArrowUp => Increase font size
+if (e.altKey && e.key === 'ArrowUp') {
+  e.preventDefault();
+  changeFontSizeDelta(+1);
+}
+
+// Alt + ArrowDown => Decrease font size
+if (e.altKey && e.key === 'ArrowDown') {
+  e.preventDefault();
+  changeFontSizeDelta(-1);
+}
+
+// Ctrl + ArrowRight => Increase level
+if (e.ctrlKey && e.key === 'ArrowRight') {
+  e.preventDefault();
+  increaseLevelAtCursor();
+}
+
+// Ctrl + ArrowLeft => Decrease level
+if (e.ctrlKey && e.key === 'ArrowLeft') {
+  e.preventDefault();
+  decreaseLevelAtCursor();
+}
+
+// Ctrl + . => Cycle list marker forward
+if (e.ctrlKey && e.key === '.') {
+  e.preventDefault();
+  cycleListMarker(1); // forward
+}
+
+// Ctrl + , => Cycle list marker backward
+if (e.ctrlKey && e.key === ',') {
+  e.preventDefault();
+  cycleListMarker(-1); // backward
+}
+
+// Ctrl + s => save file
+
+if (e.ctrlKey&&e.key.toLowerCase() ==='s'){
+    e.preventDefault();
+    if (focusState.mode === "on") { focusModeOff()}
+    expandAll();
+    const currentFilename = filenameDisplay.textContent.trim();
+    const content = textarea.value;
+
+    if (currentFilename === 'new_file') {
+      const newName = prompt('Enter a filename (e.g., notes.txt):');
+      if (!newName) return;
+      saveToServer(newName, content);
+    } else {
+      saveToServer(currentFilename, content);
+    }
+}
+
+// Ctrl + Shift + F => Toggle Focus Mode
+if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'f') {
+  e.preventDefault();
+  toggleFocusMode();
+}
+  if (e.ctrlKey && e.key === 'ArrowUp') {
+    e.preventDefault();
+    swapLine(-1);
+  }
+
+  if (e.ctrlKey && e.key === 'ArrowDown') {
+    e.preventDefault();
+    swapLine(1);
+  }
+});
+
+// ========== Debug & Buttons ==========
+
+function debugDisplay() {
+  if (!debugEnabled) return;
+  const obj1 = whereTheCursorOn();
+  const obj2 = obj1 ? whatLevelOn(obj1.lineText) : { type: "none", level: 0 };
+  alert(`Cursor Info: ${JSON.stringify(obj1)}, Structure Info: ${JSON.stringify(obj2)}`);
+}
+
+document.getElementById('toggleDebug').addEventListener('click', () => {
+  debugEnabled = !debugEnabled;
+  document.getElementById('toggleDebug').textContent = debugEnabled ? 'Disable Debug' : 'Enable Debug';
+});
+
+textarea.addEventListener('click', debugDisplay);
+textarea.addEventListener('keyup', debugDisplay);
+
+// Removed input event listener here and replaced with the new one above for undo
+textarea.addEventListener('input', () => {
+    isSaved = false;
+    collapseCycle = { maxLevel: 0, state: 0 };
+});
+
+document.getElementById('openBtn').addEventListener('click', function (e) {
+  if (!isSaved && !confirm("You have unsaved changes. Continue anyway?")) {
+    e.preventDefault(); // cancel navigation
+  }
+});
+document.getElementById('newFile').addEventListener('click', function (e) {
+  if (!isSaved && !confirm("You have unsaved changes. Continue anyway?")) {
+    e.preventDefault(); // cancel navigation
+  }
+});
+
+  saveBtn.addEventListener('click', () => {
+    if (focusState.mode === "on") { focusModeOff()}
+
+    expandAll();
+    const currentFilename = filenameDisplay.textContent.trim();
+    const content = textarea.value;
+
+    if (currentFilename === 'new_file') {
+      const newName = prompt('Enter a filename (e.g., notes.txt):');
+      if (!newName) return;
+      saveToServer(newName, content);
+    } else {
+      saveToServer(currentFilename, content);
+    }
+  });
+
+  saveAsBtn.addEventListener('click', () => {
+    if (focusState.mode === "on") { focusModeOff()}
+    expandAll();
+    const content = textarea.value;
+    const newName = prompt('Save As: Enter a new filename (e.g., mydoc.html):');
+    if (!newName) return;
+    saveToServer(newName, content);
+  });
+// Font and size
+    function changeFont() {
+      const font = document.getElementById('fontSelect').value;
+      document.getElementById('myTextarea').style.fontFamily = font;
+    }
+
+    function changeSize() {
+      const size = document.getElementById('sizeInput').value;
+      document.getElementById('myTextarea').style.fontSize = size + 'px';
+    }
+
+    function changeColor() {
+      const color = document.getElementById('colorPicker').value;
+      document.getElementById('myTextarea').style.color = color;
+    }
+
+    function changeFontSizeDelta(delta) {
+    const sizeInput = document.getElementById('sizeInput');
+    let currentSize = parseInt(sizeInput.value, 10) || 16;
+
+    let newSize = currentSize + delta;
+
+    // Clamp between 8 and 72
+    newSize = Math.max(8, Math.min(72, newSize));
+
+    sizeInput.value = newSize;
+    changeSize(); // Re-use existing logic to apply it
+    }
+
+</script>
+
+</body>
+</html>

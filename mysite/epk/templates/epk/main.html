@@ -1,0 +1,54 @@
+
+<head>
+{% load static %}
+<script src="{% static 'epk/js/epk.js' %}"></script>
+<link rel="stylesheet" href="{% static 'epk/css/style.css' %}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <p> ePK Web App </p>
+  </div>
+  <div class="footer">
+  <p> Powered by Django </p>
+  <button onclick="printCustomerHistory('a4')">Print customer's history with A4 PDF format</button>
+  </div>
+  <div class="workingArea">
+    <div class="customerList">
+      <div class="customerListTab">
+        <div class="waitingList">
+        <p> Waiting List</p>
+        </div>
+        <div class="workingList">
+        <p> Working List</p>
+        </div>
+      </div>
+      <div class="customerNameList">
+	<p id = "customerList"> </p>
+      </div>
+    </div>
+    <div class="clinicalArea">
+      <div class="CustomerInfo">
+      <p> Customer Informations </p>
+      </div>
+      <div class="clinicalInfo">
+        <div class="clinicalTab">
+          <div class="customerHistory">
+          <p> Customer's history </p>
+          </div>
+          <div class="customerResult">
+          <p> Lab's Result </p>
+          </div>
+          <div class="customerPrecription">
+          <p> Precription</p>
+          </div>
+        </div>
+        <div class="customerClinicalInfo">
+            <textarea id="customerClinicalInput" name="customerClinicalInput" placeholder="Enter customer's clinal information here..."></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>

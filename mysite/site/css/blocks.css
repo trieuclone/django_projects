@@ -1,0 +1,29 @@
+/* This is a partial blocks.css, you need to add more rules
+   to this file to complete the assignment.  Do not add any CSS
+   styling to the original index.htm / start.htm */
+
+body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* Here is one of many  CSS rules you will need... */
+#one { position: sticky; 
+        bottom: 0; left:30px;
+        border: 2px solid #4CAF50; background-color: #FFD700; width: 25%;
+    
+}
+#two { position: sticky; 
+        right: 20px; top: 0;
+        border-color: green; border-width: 5px; border-style: dashed; width: 25%;
+    
+}
+#three { position: sticky; 
+        top: 0; left: 0;
+        border-color: orange;border-width: 5px; border-style: solid; width: 25%;
+     
+}
+#four { position: sticky; 
+        bottom: 0; right:0;
+        border-color: yellow; border-width: 5px; border-style: solid; width: 25%;
+    
+}

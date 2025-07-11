@@ -1,0 +1,18 @@
+{% if author_list %}
+    <ul>
+    {% for author in author_list %}
+        <li>
+            <a href="{{ author.id }}/">{{ author.author_name }} </a>
+            <a href="{{ author.id }}/update/"> | Update </a>
+            <a href="{{ author.id }}/delete/"> | Delete </a>
+            {% if  author.owner.get_username == user.get_username %}
+            <a href="/authz/ownerupdate/{{ author.id }}/"> | OwnerUpdate </a>
+            {% endif %}
+
+        </li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p> There is no author yet.</p>
+{% endif %}
+ <a href = "{% url 'authz:author_create' %}"> Add author </a>

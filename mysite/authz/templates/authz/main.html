@@ -1,0 +1,31 @@
+<!-- Có thể kiểm tra is_authencatited trong views.py thay vì trong template -->
+{% if user.is_authenticated %}
+
+<p> Tên user
+ <pre>
+ Name: {{ user.get_full_name }}
+ Email: {{ user.email }}
+ Id: {{ user.id }}
+ </pre>
+</p>
+<!-- logout from get request sẽ không áp dụng trong phiên bản 5.2.
+    ?next: redirect url -->
+<p> you can <a href =  "{% url 'logout' %}?next={% url 'polls:index' %}"> Logout </a></p>
+<!-- post method to logout
+    không redirect, trở về logout view -->
+<form action="{% url 'logout' %}" method="post">
+  {% csrf_token %}
+  <button type="submit">Log Out</button>
+</form>
+<!-- customsize logout template -->
+<form action="{% url 'authz:logout' %}" method="post">
+  {% csrf_token %}
+  <button type="submit">Customsized Log Out</button>
+<input type="hidden" name = "next" value = "{% url 'authz:main' %}" />
+
+</form>
+
+{% else %}
+<p> Please login to continue </p>
+<p> <a href="{% url 'login' %}?next={{request.path }}"> Login </a></p>
+{% endif %}
