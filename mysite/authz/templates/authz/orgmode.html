@@ -137,9 +137,10 @@ const textarea = document.getElementById('myTextarea');
 const saveBtn = document.getElementById('saveBtn');
 const saveAsBtn = document.getElementById('saveAsBtn');
 const filenameDisplay = document.getElementById('currentFilename');
+const themeBtn = document.getElementById('theme');
 
-const undoBtn = document.getElementById('undoBtn'); // ADDED
-const redoBtn = document.getElementById('redoBtn'); // ADDED
+const undoBtn = document.getElementById('undoBtn');
+const redoBtn = document.getElementById('redoBtn');
 
 // ========== Undo / Redo ==========
 // Each state is { value: textarea.value, collapsedBlocks: {...} }
@@ -876,6 +877,24 @@ function smoothScrollToLine(textarea, lineNumber) {
   });
 }
 
+function toggleTheme() {
+  if (themeBtn.textContent  === "Light theme") {
+  textarea.style.backgroundColor= "#2d3743";
+  textarea.style.color = "#e1e1e0";
+  textarea.style.fontFamily = "Courier New";
+  themeBtn.textContent  = "Dark theme";
+  themeBtn.style.backgroundColor = "blue";
+  themeBtn.style.color = "white";
+  }
+  else {
+  themeBtn.textContent  = "Light theme";
+  themeBtn.style.backgroundColor = "#f0f0f0";
+  themeBtn.style.color = "black";
+  textarea.style.backgroundColor= "#ffffff";
+  textarea.style.color = "#0036b3";
+  textarea.style.fontFamily = "Monospace";
+  }
+}
 // ========== Shortcuts ==========
 
 textarea.addEventListener('keydown', (e) => {
@@ -1006,6 +1025,12 @@ if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'f') {
     e.preventDefault();
     swapLine(1);
   }
+
+if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'l') {
+    e.preventDefault();
+    toggleTheme();
+  }
+
 });
 
 // ========== Debug & Buttons ==========
@@ -1042,24 +1067,7 @@ document.getElementById('newFile').addEventListener('click', function (e) {
   }
 });
 
-document.getElementById('theme').addEventListener('click', function (e) {
-  if (document.getElementById('theme').textContent  === "Light theme") {
-  textarea.style.backgroundColor= "#2d3743";
-  textarea.style.color = "#e1e1e0";
-  textarea.style.fontFamily = "Courier New";
-  document.getElementById('theme').textContent  = "Dark theme";
-  document.getElementById("theme").style.backgroundColor = "blue";
-  document.getElementById("theme").style.color = "white";
-  }
-  else {
-  document.getElementById('theme').textContent  = "Light theme";
-  document.getElementById("theme").style.backgroundColor = "#f0f0f0";
-  document.getElementById("theme").style.color = "black";
-  textarea.style.backgroundColor= "#ffffff";
-  textarea.style.color = "#0036b3";
-  textarea.style.fontFamily = "Monospace";
-  }
-});
+  themeBtn.addEventListener('click', toggleTheme);
 
   saveBtn.addEventListener('click', () => {
     if (focusState.mode === "on") { focusModeOff()}
