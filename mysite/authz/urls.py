@@ -1,11 +1,14 @@
 from django.urls import path
 
 from . import views
-from authz.views import ProtectedView, MyLogout, ManualForm, SaveFileView, list_my_directory, serve_text_file
+from authz.views import ProtectedView, MyLogout, ManualForm, SaveFileView, list_my_directory, serve_text_file, UploadImage, Image
 app_name = "authz"
 urlpatterns = [
     path("", views.main, name="main"),
     path("orgmode/", views.orgmode, name="orgmode"),
+    path("image/upload/", UploadImage.as_view(), name="upload_image"),
+    path('image/', Image.as_view(), name='image'),
+    path('image/open', views.serve_image, name='open_image'),
     path("protect/", ProtectedView.as_view(), name="protect"),
     path("context_testing/", views.context_testing, name="context_testing"),
     path("logout/", MyLogout.as_view(), name="logout"),

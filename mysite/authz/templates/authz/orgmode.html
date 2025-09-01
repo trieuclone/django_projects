@@ -80,6 +80,7 @@
   <button id="toggleDebug">Enable Debug</button>
 
   <div>
+    <a href="{% url 'authz:image' %}" target="_blank" class="button-link">Image drawing</a>
     <a id="focusMode" class="button-link">Focus mode</a>
     <a id="newFile" href="{% url 'authz:orgmode' %}" class="button-link">New file</a>
     <a id="openBtn" href="{% url 'authz:list_my_directory' %}" class="button-link">Open</a>
@@ -895,6 +896,77 @@ function toggleTheme() {
   textarea.style.fontFamily = "Monospace";
   }
 }
+
+function goToParentStructure() {
+  const pos = whereTheCursorOn();
+  if (!pos) return;
+
+  const lines = textarea.value.split('\n');
+  const currentLineIndex = pos.lineIndex;
+  const currentLevel = whatLevelOn(lines[currentLineIndex]);
+
+  for (let i = currentLineIndex - 1; i >= 0; i--) {
+    const targetLevel = whatLevelOn(lines[i]);
+
+    // Case: current is 'none'
+    if (currentLevel.type === 'none') {
+      if (targetLevel.type === 'list' || targetLevel.type === 'header') {
+        moveCursorToLine(i, lines);
+        return;
+      }
+    }
+
+    // Case: current is 'list'
+    else if (currentLevel.type === 'list') {
+      if (
+        (targetLevel.type === 'list' && targetLevel.level < currentLevel.level) ||
+        targetLevel.type === 'header'
+      ) {
+        moveCursorToLine(i, lines);
+        return;
+      }
+    }
+
+    // Case: current is 'header'
+    else if (currentLevel.type === 'header') {
+      if (
+        targetLevel.type === 'header' &&
+        targetLevel.level < currentLevel.level
+      ) {
+        moveCursorToLine(i, lines);
+        return;
+      }
+    }
+  }
+}
+
+// Helper to move cursor to a specific line
+function isLineOutOfView(lineIndex, lineHeight, scrollTop, clientHeight) {
+  const lineTop = lineIndex * lineHeight;
+  const lineBottom = lineTop + lineHeight;
+  return lineTop < scrollTop || lineBottom > scrollTop + clientHeight;
+}
+
+function moveCursorToLine(lineIndex, lines) {
+  let offset = 0;
+  for (let i = 0; i < lineIndex; i++) {
+    offset += lines[i].length + 1; // +1 for '\n'
+  }
+    offset += lines[lineIndex].length;
+  textarea.selectionStart = textarea.selectionEnd = offset;
+  textarea.focus();
+  // check whether the new positon is out of view. if it is, scroll to new position
+
+  const lineHeight = parseInt(getComputedStyle(textarea).lineHeight, 10);
+  const scrollTop = textarea.scrollTop;
+  const clientHeight = textarea.clientHeight;
+
+  if (isLineOutOfView(lineIndex, lineHeight, scrollTop, clientHeight)) {
+     smoothScrollToLine(textarea, lineIndex);
+    }
+
+}
+
 // ========== Shortcuts ==========
 
 textarea.addEventListener('keydown', (e) => {
@@ -1030,6 +1102,11 @@ if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'l') {
     e.preventDefault();
     toggleTheme();
   }
+// Ctrl + / to move to the parent
+if (e.ctrlKey && e.key === '/') {
+  e.preventDefault();
+  goToParentStructure();
+}
 
 });
 
@@ -1121,6 +1198,96 @@ document.getElementById('newFile').addEventListener('click', function (e) {
     sizeInput.value = newSize;
     changeSize(); // Re-use existing logic to apply it
     }
+
+// popup image
+document.addEventListener("keydown", async function (e) {
+  if (e.ctrlKey && e.key.toLowerCase() === "i") {
+    e.preventDefault();
+
+    const textarea = document.getElementById("myTextarea");
+    const cursorPos = textarea.selectionStart;
+    const text = textarea.value;
+
+    // Find the current line and cursor position in line
+    const lines = text.split("\n");
+    let charCount = 0;
+    let lineIndex = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      if (cursorPos <= charCount + lines[i].length) {
+        lineIndex = i;
+        break;
+      }
+      charCount += lines[i].length + 1; // +1 for newline
+    }
+
+    const currentLine = lines[lineIndex];
+    const cursorInLine = cursorPos - charCount;
+
+    // Find all Org-style links in the current line
+    const linkRegex = /\[\[([^\]]+?)\](?:\[[^\]]*?\])?\]/g;
+    let match;
+    let selectedLink = null;
+
+    while ((match = linkRegex.exec(currentLine)) !== null) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (cursorInLine >= start && cursorInLine <= end) {
+        selectedLink = match[1]; // get the LINK part
+        break;
+      }
+    }
+
+    if (!selectedLink) {
+      alert("No [[LINK]] found at or near the cursor.");
+      return;
+    }
+
+    // Normalize "./" and sanitize
+    let relativePath = selectedLink;
+    if (relativePath.startsWith("./")) {
+      relativePath = relativePath.slice(2);
+    }
+
+    const safePath = relativePath.replace(/(\.\.\/|\/\/|~|\\)/g, "");
+
+    try {
+      const csrftoken = getCookie('csrftoken');
+
+      const response = await fetch("{% url 'authz:open_image' %}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrftoken
+        },
+        body: JSON.stringify({ path: safePath })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} – ${errorText}`);
+      }
+
+      const blob = await response.blob();
+
+      if (!blob.type.startsWith("image/")) {
+        const text = await blob.text();
+        console.error("Not an image:", text);
+        alert("The fetched content is not an image.");
+        return;
+      }
+
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank");
+
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+
+    } catch (err) {
+      console.error("Error fetching image:", err);
+      alert("Failed to open image: " + err.message);
+    }
+  }
+});
 
 </script>
 

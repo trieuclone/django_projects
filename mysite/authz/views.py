@@ -226,3 +226,107 @@ class SaveFileView(LoginRequiredMixin, View):
             return JsonResponse({'success': True, 'message': f'File saved as {filename}'})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+
+# drawingapp/views.py
+import base64
+import os
+#from django.conf import settings
+#from django.http import JsonResponse
+#from django.views.decorators.csrf import csrf_exempt
+import json
+
+#@csrf_exempt  # use this only for testing; better handle CSRF token properly in production
+@method_decorator(csrf_protect, name='dispatch')
+class UploadImage(LoginRequiredMixin, View):
+    login_url = None  # disables redirect
+    raise_exception = False  # prevents HTTP 403 by default
+
+    def handle_no_permission(self):
+        return JsonResponse({
+            'success': False,
+            'error': 'Authentication required. Please log in.'
+        }, status=401)  # or 403 if you prefer
+
+    def post(self, request):
+
+        try:
+            data = json.loads(request.body)
+            image_data = data.get('image')
+            filename = data.get('filename')
+
+            if not image_data or not filename:
+                return JsonResponse({'error': 'Missing image or filename'}, status=400)
+
+            # Strip the base64 prefix if present
+            if image_data.startswith('data:image'):
+                _, image_data = image_data.split(',', 1)
+
+            # Decode the base64 image data
+            image_bytes = base64.b64decode(image_data)
+
+            # Ensure filename is safe (prevent path traversal)
+            filename = os.path.basename(filename)
+
+            # Save path
+            save_path = '/home/DjangoN1/trieudtc.github.io/org_files/img'
+            os.makedirs(save_path, exist_ok=True)
+
+            file_path = os.path.join(save_path, filename)
+            if os.path.exists(file_path):
+                return JsonResponse({'error': 'File already exists'}, status=409)  # 409 Conflict
+            with open(file_path, 'wb') as f:
+                f.write(image_bytes)
+
+            return JsonResponse({'message': 'Upload successful', 'file': f'uploads/{filename}'})
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    def get(self, request):
+        return JsonResponse({'error': 'GET method not allowed'}, status=405)
+
+
+class Image(LoginRequiredMixin, View):
+    def get(self, request):
+        return render(request, 'authz/image.html')
+
+# views.py
+import os
+import mimetypes
+from urllib.parse import unquote
+
+from django.conf import settings
+from django.http import FileResponse, HttpResponseBadRequest
+from django.views.decorators.csrf import csrf_protect
+
+
+@csrf_protect  # CSRF token required
+def serve_image(request):
+    if request.method != "POST":
+        return HttpResponseBadRequest("Only POST allowed")
+
+    try:
+        data = json.loads(request.body)
+        raw_path = data.get("path", "")
+        if not raw_path:
+            return HttpResponseBadRequest("Missing 'path'")
+    except Exception:
+        return HttpResponseBadRequest("Invalid JSON")
+
+    # Decode URL-encoded path (e.g., spaces)
+    relative_path = unquote(raw_path)
+
+    # Prevent directory traversal (security check)
+    #safe_root = os.path.abspath(settings.MEDIA_ROOT)
+    img_path = '/home/DjangoN1/trieudtc.github.io/org_files'
+    requested_path = os.path.join(img_path, relative_path)
+
+    #if not requested_path.startswith(safe_root):
+    #    return HttpResponseBadRequest("Invalid path")
+
+    if not os.path.exists(requested_path):
+        raise Http404("File not found")
+
+    content_type, _ = mimetypes.guess_type(requested_path)
+    return FileResponse(open(requested_path, 'rb'), content_type=content_type)
