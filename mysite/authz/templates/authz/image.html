@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="csrf-token" content="{{ csrf_token }}">
-  <title>Advanced Drawing Tool</title>
+  <title>Drawing Note</title>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -114,7 +114,7 @@ canvas {
 </head>
 <body>
 
-<h2>Canvas Drawing App</h2>
+<h2>Draw to remember</h2>
 
 <div class="controls">
 
@@ -153,7 +153,7 @@ canvas {
   </label>
 
   <label>
-    Upload Image:
+    Open Image:
     <input type="file" id="imageUpload" accept="image/*" />
   </label>
 
@@ -165,6 +165,29 @@ canvas {
     Filename:
     <input type="text" id="filenameInput" placeholder="mydrawing.png" />
   </label>
+  <label>Width: <input type="number" id="canvasWidth" value="800" min="100"></label>
+  <label>Height: <input type="number" id="canvasHeight" value="500" min="100"></label>
+  <button onclick="resizeCanvas()">Resize</button>
+  <label>
+  Manual Image Control:
+  <input type="checkbox" id="manualImageControl">
+</label>
+<label>
+  X:
+  <input type="number" id="imageX" value="0" style="width: 60px;">
+</label>
+<label>
+  Y:
+  <input type="number" id="imageY" value="0" style="width: 60px;">
+</label>
+<label>
+  Width:
+  <input type="number" id="imageWidth" value="100" style="width: 80px;">
+</label>
+<label>
+  Height:
+  <input type="number" id="imageHeight" value="100" style="width: 80px;">
+</label>
 
 </div>
 
@@ -203,6 +226,13 @@ canvas {
   document.getElementById('penType').addEventListener('change', e => penType = e.target.value);
   document.getElementById('drawMode').addEventListener('change', e => drawMode = e.target.value);
   document.getElementById('fontSize').addEventListener('input', e => fontSize = parseInt(e.target.value));
+  document.getElementById('manualImageControl').addEventListener('change', (e) => {
+  const enabled = e.target.checked;
+    document.getElementById('imageX').disabled = !enabled;
+    document.getElementById('imageY').disabled = !enabled;
+    document.getElementById('imageWidth').disabled = !enabled;
+    document.getElementById('imageHeight').disabled = !enabled;
+  });
 
   // Canvas Events
   canvas.addEventListener('mousedown', e => {
@@ -437,7 +467,7 @@ canvas.addEventListener('drop', e => {
     const img = new Image();
     img.onload = () => {
       saveState();
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      drawImageCenteredAndFitted(img);
     };
     img.src = reader.result;
   };
@@ -451,10 +481,11 @@ document.getElementById('imageUpload').addEventListener('change', function(e) {
   const reader = new FileReader();
   reader.onload = function() {
     const img = new Image();
-    img.onload = function() {
-      saveState(); // Add to undo stack
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height); // You can adjust size/position
+    img.onload = function () {
+      saveState();
+      drawImageCenteredAndFitted(img);
     };
+
     img.src = reader.result;
   };
   reader.readAsDataURL(file);
@@ -543,6 +574,85 @@ canvas.addEventListener('touchend', e => {
 
   ctx.beginPath();
 });
+
+// resize canvas
+function resizeCanvas() {
+  saveState();
+  const width = parseInt(document.getElementById('canvasWidth').value);
+  const height = parseInt(document.getElementById('canvasHeight').value);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  canvas.width = width;
+  canvas.height = height;
+  ctx.putImageData(imageData, 0, 0);
+}
+
+// Handle paste event for images
+document.addEventListener('paste', function (e) {
+  const items = (e.clipboardData || window.clipboardData).items;
+  if (!items) return;
+
+  for (const item of items) {
+    if (item.type.indexOf('image') !== -1) {
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+
+      reader.onload = function (event) {
+        const img = new Image();
+        img.onload = function () {
+          saveState();
+          drawImageCenteredAndFitted(img);
+        };
+
+        img.src = event.target.result;
+      };
+
+      reader.readAsDataURL(blob);
+    }
+  }
+});
+
+// Centered and fitted helper function
+function drawImageCenteredAndFitted(img) {
+  const isManual = document.getElementById('manualImageControl')?.checked;
+
+  if (isManual) {
+    const x = parseInt(document.getElementById('imageX').value);
+    const y = parseInt(document.getElementById('imageY').value);
+    const width = parseInt(document.getElementById('imageWidth').value);
+    const height = parseInt(document.getElementById('imageHeight').value);
+
+    if (
+      isNaN(x) || isNaN(y) ||
+      isNaN(width) || isNaN(height) ||
+      width <= 0 || height <= 0
+    ) {
+      alert("Invalid manual image position or size.");
+      return;
+    }
+
+    ctx.drawImage(img, x, y, width, height);
+  } else {
+    const canvasAspect = canvas.width / canvas.height;
+    const imageAspect = img.width / img.height;
+
+    let drawWidth, drawHeight;
+
+    if (imageAspect > canvasAspect) {
+      drawWidth = canvas.width;
+      drawHeight = canvas.width / imageAspect;
+    } else {
+      drawHeight = canvas.height;
+      drawWidth = canvas.height * imageAspect;
+    }
+
+    const offsetX = (canvas.width - drawWidth) / 2;
+    const offsetY = (canvas.height - drawHeight) / 2;
+
+    ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+  }
+}
+
 
 
 
